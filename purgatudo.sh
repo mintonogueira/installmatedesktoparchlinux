@@ -1,75 +1,92 @@
 #!/bin/sh
 
-# Ativa o modo verbose total para rastreamento detalhado
+# Ativa o modo verbose total para rastreamento de cada remoção forçada
 set -v
 set -x
 
-echo "⚠️⚠️ INICIANDO PURGA TOTAL E VALIDAÇÃO DE LIMPEZA ⚠️⚠️"
+echo "⚠️⚠️ OPERAÇÃO DE EXTERMÍNIO TOTAL (FORÇA BRUTA) - EXCETO NETWORK-MANAGER ⚠️⚠️"
 
-# Listas de pacotes para purga e checagem
+# --- ETAPA 0: Destravar e Sincronizar ---
+sudo rm -f /var/lib/pacman/db.lck
+sudo pacman -Sy
+
+# --- ETAPA 1: Parar Serviços (EXCETO NetworkManager) ---
+sudo systemctl disable --now ufw lightdm bluetooth 2>/dev/null
+
+# Listas de pacotes para extermínio
 PACOTES_AUR="webcamoid brave-bin simplescreenrecorder google-chrome octopi ocs-url archlinux-tweak-tool-git rclone-browser"
-PACOTES_PACMAN="mate-desktop atril caja-image-converter caja-open-terminal caja-sendto eom mate-applets mate-backgrounds mate-calc mate-control-center mate-icon-theme mate-media mate-menus mate-notification-daemon mate-panel mate-polkit mate-power-manager mate-screensaver mate-session-manager mate-settings-daemon mate-system-monitor mate-terminal mate-user-guide mate-utils pluma xorg xorg-server lightdm lightdm-gtk-greeter lightdm-gtk-greeter-settings network-manager-applet bluez bluez-utils blueman xdg-user-dirs rclone flatpak gufw gparted file-roller xarchiver engrampa timeshift terminator flameshot curl wget transmission-gtk"
 
-# --- ETAPA 1: Desabilitar Serviços ---
-sudo systemctl disable --now ufw lightdm NetworkManager bluetooth 2>/dev/null
+# Nota: network-manager-applet e NetworkManager REMOVIDOS da lista de purga
+PACOTES_PACMAN="mate-desktop atril caja-image-converter caja-open-terminal caja-sendto eom mate-applets mate-backgrounds mate-calc mate-control-center mate-icon-theme mate-media mate-menus mate-notification-daemon mate-panel mate-polkit mate-power-manager mate-screensaver mate-session-manager mate-settings-daemon mate-system-monitor mate-terminal mate-user-guide mate-utils pluma xorg xorg-server lightdm lightdm-gtk-greeter lightdm-gtk-greeter-settings bluez bluez-utils blueman xdg-user-dirs rclone flatpak gufw gparted file-roller xarchiver engrampa timeshift terminator flameshot curl wget transmission-gtk"
 
-# --- ETAPA 2: Purga AUR (Paru) ---
+# --- ETAPA 2: Força Bruta AUR ---
 if command -v paru >/dev/null 2>&1; then
     for pkg in $PACOTES_AUR; do
-        paru -Rns --noconfirm "$pkg" 2>/dev/null
+        echo "Exterminando pacote AUR: $pkg"
+        sudo paru -Rdd --noconfirm "$pkg" 2>/dev/null
     done
-    paru -Scc --noconfirm
-    rm -rf "$HOME/.cache/paru"
 fi
 
-# --- ETAPA 3: Purga Oficial (Pacman) ---
-# O comando ignora pacotes já removidos para evitar erros em múltiplas execuções
-sudo pacman -Rns --noconfirm $PACOTES_PACMAN 2>/dev/null
+# --- ETAPA 3: Força Bruta Pacman (Remoção sem volta) ---
+for pkg in $PACOTES_PACMAN; do
+    echo "Exterminando pacote oficial: $pkg"
+    # -Rdd: Remove o pacote e ignora se o sistema vai quebrar ou se há dependências
+    sudo pacman -Rdd --noconfirm "$pkg" 2>/dev/null
+done
 
-# --- ETAPA 4: Limpeza de Órfãos e Cache ---
+# --- ETAPA 4: Purga de Dependências Órfãs Residuais ---
+echo "Limpando resíduos de dependências que ficaram para trás..."
+# Este comando remove tudo o que não é explicitamente exigido pelo sistema base
 while [ -n "$(pacman -Qdtq)" ]; do
     sudo pacman -Rns $(pacman -Qdtq) --noconfirm 2>/dev/null
 done
-sudo pacman -Scc --noconfirm
 
-# --- ETAPA 5: Limpeza de Arquivos de Configuração ---
+# --- ETAPA 5: Destruição Física de Diretórios e Configurações ---
+echo "Deletando pastas de configuração e caches..."
+sudo rm -rf /etc/lightdm
+sudo rm -rf /etc/X11/xorg.conf.d/
+rm -rf "$HOME/.cache/paru"
+rm -rf "$HOME/.config/mate"
+rm -rf "$HOME/.config/terminator"
+rm -rf "$HOME/.local/share/mate"
+rm -rf "$HOME/.config/transmission"
 rm -f fixrclone-browser.sh
-rm -rf "$HOME/paru" "$HOME/.config/mate" "$HOME/.config/terminator"
-CONFIG_FILES="$HOME/.bashrc $HOME/.zshrc $HOME/.profile $HOME/.xprofile $HOME/.bash_profile"
-for file in $CONFIG_FILES; do
+
+# Limpeza dos arquivos de inicialização do Shell
+for file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.xprofile" "$HOME/.bash_profile"; do
     if [ -f "$file" ]; then
-        sed -i '/# Auto-config: Define terminal padrão (Rclone fix)/d' "$file"
-        sed -i '/export TERMINAL=terminator/d' "$file"
-        sed -i '/# Auto-config: Rclone fix/d' "$file"
+        sed -i '/Rclone fix/d' "$file"
+        sed -i '/export TERMINAL=/d' "$file"
+        sed -i '/Auto-config/d' "$file"
     fi
 done
 
-# --- ETAPA 6: CHECAGEM DE INTEGRIDADE DA REMOÇÃO ---
+# --- ETAPA 6: VALIDAÇÃO E MENSAGEM DE SUCESSO ---
 set +v
 set +x
 echo "----------------------------------------------------------------"
-echo "🔍 Verificando se restou algum componente no sistema..."
+echo "🔍 VERIFICAÇÃO DE RESQUÍCIOS..."
 
-RESTOU_ALGO=0
+RESIDUOS=0
 for pkg in $PACOTES_AUR $PACOTES_PACMAN; do
     if pacman -Qi "$pkg" >/dev/null 2>&1; then
-        echo "⚠️  AVISO: O pacote $pkg ainda consta como instalado."
-        RESTOU_ALGO=1
+        echo "❌ FALHA: $pkg ainda detectado."
+        RESIDUOS=1
     fi
 done
 
-if [ $RESTOU_ALGO -eq 0 ]; then
+if [ $RESIDUOS -eq 0 ]; then
     echo ""
     echo "################################################################"
     echo "          REMOÇÃO FEITA COM SUCESSO"
     echo "################################################################"
-    echo "Nenhum pacote residual foi encontrado na base de dados."
+    echo "O sistema foi limpo. NetworkManager preservado e ativo."
 else
-    echo "❌ A purga foi parcial. Alguns pacotes ainda estão presentes."
+    echo "⚠️  Alguns pacotes resistiram à força bruta inicial."
 fi
 
 echo ""
-printf "Pressione [ENTER] para REINICIAR ou [Ctrl+C] para cancelar: "
+printf "Pressione [ENTER] para REINICIAR o sistema: "
 read -r null_var
 
 sudo reboot
