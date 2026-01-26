@@ -1,92 +1,65 @@
 #!/bin/sh
 
-# Ativa o modo verbose total para rastreamento de cada ação
+# Ativa o modo verbose total
 set -v
 set -x
 
-echo "⚠️⚠️ EXTERMÍNIO TOTAL E LIMPEZA DE CONFIGURAÇÕES ⚠️⚠️"
+echo "⚠️ INICIANDO PURGA COM PROTEÇÃO TOTAL AO NETWORKMANAGER ⚠️"
 
-# Listas de alvos para remoção
+# --- ETAPA 1: Identificação de Dependências Protegidas ---
+# Extraímos dinamicamente tudo que o NetworkManager precisa para rodar
+PROTECTED_DEPS=$(pactree -u networkmanager)
+echo "Pacotes protegidos: $PROTECTED_DEPS"
+
+# --- ETAPA 2: Listas de Alvos ---
 PACOTES_AUR="webcamoid brave-bin simplescreenrecorder google-chrome octopi ocs-url archlinux-tweak-tool-git rclone-browser"
 PACOTES_PACMAN="mate-desktop atril caja-image-converter caja-open-terminal caja-sendto eom mate-applets mate-backgrounds mate-calc mate-control-center mate-icon-theme mate-media mate-menus mate-notification-daemon mate-panel mate-polkit mate-power-manager mate-screensaver mate-session-manager mate-settings-daemon mate-system-monitor mate-terminal mate-user-guide mate-utils pluma xorg xorg-server lightdm lightdm-gtk-greeter lightdm-gtk-greeter-settings bluez bluez-utils blueman xdg-user-dirs rclone flatpak gufw gparted file-roller xarchiver engrampa timeshift terminator flameshot curl wget transmission-gtk"
 
-# --- ETAPA 1: Verificação de Execução Prévia ---
-set +v +x
-ALGO_INSTALADO=0
+# --- ETAPA 3: Purga com Filtro de Segurança ---
 for pkg in $PACOTES_AUR $PACOTES_PACMAN; do
-    if pacman -Qi "$pkg" >/dev/null 2>&1; then
-        ALGO_INSTALADO=1
-        break
+    # Verifica se o pacote atual está na lista de proteção do NetworkManager
+    if echo "$PROTECTED_DEPS" | grep -qw "$pkg"; then
+        echo "🛡️ Pulando $pkg (Dependência crítica do NetworkManager)"
+    else
+        # Remove apenas se NÃO for uma dependência necessária para a rede
+        sudo pacman -Rdd --noconfirm "$pkg" 2>/dev/null
     fi
 done
 
-if [ $ALGO_INSTALADO -eq 0 ]; then
-    echo "################################################################"
-    echo "          REMOÇÃO JÁ FOI FEITA COM SUCESSO"
-    echo "################################################################"
-    exit 0
-fi
-set -v -x
-
-# --- ETAPA 2: Força Bruta de Remoção (Ignorando Dependências) ---
-sudo rm -f /var/lib/pacman/db.lck
-sudo systemctl disable --now ufw lightdm bluetooth 2>/dev/null
-
-# Remove pacotes AUR
-for pkg in $PACOTES_AUR; do
-    sudo paru -Rdd --noconfirm "$pkg" 2>/dev/null
-done
-
-# Remove pacotes oficiais um por um (Força Bruta)
-for pkg in $PACOTES_PACMAN; do
-    sudo pacman -Rdd --noconfirm "$pkg" 2>/dev/null
-done
-
-# --- ETAPA 3: Purga de Órfãos e Resíduos de Dependências ---
+# --- ETAPA 4: Limpeza de Órfãos com Exclusão ---
+# Remove órfãos, mas garante que nada do NetworkManager entre na faxina
 while [ -n "$(pacman -Qdtq)" ]; do
-    sudo pacman -Rns $(pacman -Qdtq) --noconfirm 2>/dev/null
+    ORPHANS=$(pacman -Qdtq)
+    for orphan in $ORPHANS; do
+        if ! echo "$PROTECTED_DEPS" | grep -qw "$orphan"; then
+            sudo pacman -Rns "$orphan" --noconfirm 2>/dev/null
+        fi
+    done
+    # Se a lista de órfãos não diminuir mais, quebra o loop
+    break 
 done
-sudo pacman -Scc --noconfirm
 
-# --- ETAPA 4: Limpeza Profunda de Configurações e Arquivos de Usuário ---
-echo "Removendo arquivos de configuração e vestígios do script..."
-
-# Remove diretórios de configuração do sistema e do usuário
-sudo rm -rf /etc/lightdm /etc/X11/xorg.conf.d/
-rm -rf "$HOME/.cache/paru" "$HOME/.config/mate" "$HOME/.config/terminator"
-rm -rf "$HOME/.local/share/mate" "$HOME/.config/transmission" "$HOME/.config/flameshot"
-rm -rf "$HOME/.config/rclone" "$HOME/.config/octopi"
+# --- ETAPA 5: Limpeza de Configurações de Usuário ---
+echo "Removendo rastros de configuração nos arquivos de perfil..."
 rm -f fixrclone-browser.sh
-
-# Limpa rigorosamente os arquivos de perfil do Shell
-for file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.xprofile" "$HOME/.bash_profile"; do
-    if [ -f "$file" ]; then
-        # Remove todas as linhas que contenham as marcas do nosso script
-        sed -i '/Rclone fix/d' "$file"
-        sed -i '/export TERMINAL=/d' "$file"
-        sed -i '/Auto-config/d' "$file"
-        sed -i '/terminator/d' "$file"
-    fi
+for file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.xprofile"; do
+    [ -f "$file" ] && sed -i '/TERMINAL/d; /Rclone/d; /Auto-config/d; /terminator/d' "$file"
 done
 
-# --- ETAPA 5: Validação Final ---
-set +v +x
-RESIDUOS=0
-for pkg in $PACOTES_AUR $PACOTES_PACMAN; do
-    if pacman -Qi "$pkg" >/dev/null 2>&1; then
-        RESIDUOS=1
-    fi
-done
+# --- ETAPA 6: Validação Final ---
+set +v
+set +x
 
-if [ $RESIDUOS -eq 0 ]; then
-    echo ""
+# Verificação de sobrevivência da rede
+if pacman -Qi networkmanager >/dev/null 2>&1; then
     echo "################################################################"
     echo "          REMOÇÃO FEITA COM SUCESSO"
+    echo "      (NetworkManager e dependências preservados)"
     echo "################################################################"
 else
-    echo "⚠️  Alguns elementos resistiram. Recomenda-se executar novamente."
+    echo "❌ Erro grave: O NetworkManager foi afetado. Reinstale imediatamente."
 fi
 
-printf "Pressione [ENTER] para REINICIAR o sistema: "
-read -r null_var
-sudo reboot
+printf "Deseja reiniciar agora? (s/n): "
+read -r resp
+if [ "$resp" = "s" ]; then sudo reboot; fi
