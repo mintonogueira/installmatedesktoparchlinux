@@ -1,21 +1,19 @@
 #!/bin/sh
 
-# Ativa o modo verbose no shell para rastreamento total de cada linha e comando
+# Ativa o modo verbose no shell para rastreamento total
 set -v
 set -x
 
-echo "INICIANDO PROCESSO DE INSTALAÇÃO INTEGRAL - MODO VERBOSE"
+echo "INICIANDO PROCESSO DE INSTALAÇÃO - ETAPA 3 TOTALMENTE INTERATIVA"
 
-# --- ETAPA 1: Repositórios Oficiais (MATE, Rede, Bluetooth e XDG) ---
+# --- ETAPA 1: Repositórios Oficiais ---
 # O COMANDO: "sudo pacman -Syyu --needed --noconfirm" é respeitado e MANTIDO.
-echo "Executando Etapa 1: Instalação via pacman..."
-
 sudo pacman -Syyu --needed --noconfirm \
     xorg xorg-server \
     lightdm lightdm-gtk-greeter lightdm-gtk-greeter-settings \
     network-manager-applet \
     bluez bluez-utils blueman \
-    xdg-user-dirs \
+    xdg-user-dirs rclone \
     flatpak gufw gparted file-roller xarchiver engrampa \
     git go rust timeshift \
     mate-desktop \
@@ -27,48 +25,44 @@ sudo pacman -Syyu --needed --noconfirm \
     mate-terminal mate-user-guide mate-utils pluma
 
 # --- ETAPA 1.2: Configuração de Diretórios de Usuário ---
-echo "Executando Etapa 1.2: Atualização dos diretórios XDG..."
 xdg-user-dirs-update
 
 # --- ETAPA 2: Instalação do Paru (AUR Helper) ---
-echo "Executando Etapa 2: Clonagem e compilação do Paru..."
-if [ -d "paru" ]; then 
-    rm -rf paru
-fi
-
+if [ -d "paru" ]; then rm -rf paru; fi
 git clone https://aur.archlinux.org/paru.git
-cd paru
+cd paru || exit
 makepkg -si --noconfirm
 cd ..
 
-# --- ETAPA 3: Instalação AUR com Questionamento de Veracidade ---
-# Incluído o pacote rclone-browser conforme solicitado.
+# --- ETAPA 3: Instalação AUR PACOTE POR PACOTE (100% Interativa) ---
 echo "----------------------------------------------------------------"
-echo "SOLICITAÇÃO DE VERIFICAÇÃO HUMANA - PACOTES AUR (PARU)"
-echo "Pacotes: webcamoid, brave-bin, simplescreenrecorder, google-chrome,"
-echo "octopi, ocs-url, archlinux-tweak-tool, rclone-browser"
+echo "INICIANDO INSTALAÇÃO INTERATIVA VIA PARU"
 echo "----------------------------------------------------------------"
 
-# Pausa momentânea do verbose para garantir a leitura do prompt pelo utilizador
-set +v
-set +x
-printf "Você confirma a veracidade e deseja proceder com a instalação via PARU? (s/n): "
-read -r resposta
-set -v
-set -x
+# Lista de pacotes solicitados
+PACOTES_AUR="webcamoid brave-bin simplescreenrecorder google-chrome octopi ocs-url archlinux-tweak-tool rclone-browser"
 
-if [ "$resposta" = "s" ] || [ "$resposta" = "S" ]; then
-    echo "Procedendo com a instalação via Paru..."
-    paru -Syyu --needed --noconfirm \
-        webcamoid brave-bin simplescreenrecorder google-chrome \
-        octopi ocs-url archlinux-tweak-tool rclone-browser
-else
-    echo "Etapa 3 ignorada pelo utilizador."
-fi
+for pkg in $PACOTES_AUR; do
+    # Desativa verbose momentaneamente para a pergunta ficar clara
+    set +v
+    set +x
+    echo ""
+    printf "Deseja instalar o pacote [%s]? (s/n): " "$pkg"
+    read -r resposta
+    # Reativa o verbose
+    set -v
+    set -x
 
-# --- ETAPA 4: Habilitação de Serviços e Reinicialização ---
-echo "Executando Etapa 4: Habilitação de serviços e reboot automatizado..."
+    if [ "$resposta" = "s" ] || [ "$resposta" = "S" ]; then
+        echo "Instalando $pkg..."
+        paru -S --needed --noconfirm "$pkg"
+    else
+        echo "Pulando o pacote $pkg..."
+    fi
+done
 
+# --- ETAPA 4: Habilitação de Serviços e Reboot ---
+echo "Finalizando configurações de sistema..."
 sudo systemctl enable ufw
 sudo systemctl enable lightdm
 sudo systemctl enable NetworkManager
