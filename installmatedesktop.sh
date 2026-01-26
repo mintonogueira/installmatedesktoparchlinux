@@ -4,19 +4,16 @@
 set -v
 set -x
 
-echo "INICIANDO INSTALAÇÃO COMPLETA - MATE DESKTOP & FIX RCLONE"
+echo "INICIANDO INSTALAÇÃO - DEFINIÇÃO ESTRITA DO TERMINATOR COMO PADRÃO"
 
 # --- ETAPA 1: Repositórios Oficiais ---
 sudo pacman -Syyu --needed --noconfirm \
     xorg xorg-server \
     lightdm lightdm-gtk-greeter lightdm-gtk-greeter-settings \
-    network-manager-applet \
-    bluez bluez-utils blueman \
-    xdg-user-dirs rclone \
+    network-manager-applet bluez bluez-utils blueman xdg-user-dirs rclone \
     flatpak gufw gparted file-roller xarchiver engrampa \
     git go rust timeshift terminator flameshot \
-    mate-desktop \
-    atril caja-image-converter caja-open-terminal caja-sendto \
+    mate-desktop atril caja-image-converter caja-open-terminal caja-sendto \
     eom mate-applets mate-backgrounds mate-calc mate-control-center \
     mate-icon-theme mate-media mate-menus mate-notification-daemon \
     mate-panel mate-polkit mate-power-manager mate-screensaver \
@@ -26,12 +23,11 @@ sudo pacman -Syyu --needed --noconfirm \
 # --- ETAPA 1.2: Configuração de Diretórios de Usuário ---
 xdg-user-dirs-update
 
-# --- ETAPA 2: Verificação e Instalação do Paru ---
+# --- ETAPA 2: Verificação do Paru ---
 instalar_paru() {
     if [ -d "paru" ]; then rm -rf paru; fi
     git clone https://aur.archlinux.org/paru.git && cd paru && makepkg -si --noconfirm && cd ..
 }
-
 if command -v paru >/dev/null 2>&1; then
     set +v +x
     printf "Paru detectado. Deseja REINSTALAR? (s/n): "
@@ -42,7 +38,7 @@ else
     instalar_paru
 fi
 
-# --- ETAPA 3: Instalação AUR PACOTE POR PACOTE (Interativa) ---
+# --- ETAPA 3: Instalação AUR (Interativa) ---
 PACOTES_AUR="webcamoid brave-bin simplescreenrecorder google-chrome octopi ocs-url archlinux-tweak-tool rclone-browser"
 for pkg in $PACOTES_AUR; do
     set +v +x
@@ -53,12 +49,21 @@ for pkg in $PACOTES_AUR; do
 done
 
 # --- ETAPA 4.2: Configurações de Interface e Atalhos (MATE) ---
-echo "Configurando atalhos e Terminal padrão no MATE..."
+echo "FORÇANDO TERMINATOR COMO PADRÃO..."
+
+# 1. Define no esquema de aplicações preferenciais do MATE
 gsettings set org.mate.applications-terminal exec 'terminator'
+gsettings set org.mate.applications-terminal exec-arg "-x"
+
+# 2. Define no Mime-Type do sistema para garantir abertura por outros apps
+if command -v xdg-mime >/dev/null 2>&1; then
+    xdg-mime default terminator.desktop x-scheme-handler/terminal
+fi
+
+# Configuração de atalhos de teclado
 gsettings set org.mate.SettingsDaemon.plugins.media-keys screenshot ''
 BASE_KEY="org.mate.SettingsDaemon.plugins.external-keybindings"
 
-# Atalhos personalizados
 gsettings set $BASE_KEY.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom0/ name 'flameshot'
 gsettings set $BASE_KEY.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom0/ command '/usr/bin/flameshot gui'
 gsettings set $BASE_KEY.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom0/ binding 'Print'
@@ -81,74 +86,32 @@ gsettings set $BASE_KEY.custom-keybindings:/org/mate/settings-daemon/plugins/ext
 
 gsettings set org.mate.SettingsDaemon.plugins.keybinding custom-list "['custom0', 'custom1', 'custom2', 'custom3', 'custom4']"
 
-# --- ETAPA 4.3: Criação e Execução do Fix Rclone-Browser ---
-echo "Iniciando Etapa 4.3: Criando fixrclone-browser.sh..."
-
+# --- ETAPA 4.3: Fix Rclone-Browser ---
 cat << 'EOF' > fixrclone-browser.sh
 #!/bin/sh
-echo "🔍 Iniciando detecção do terminal padrão do MATE..."
+echo "🔍 Detectando terminal para Rclone..."
 TARGET_TERM=""
-if command -v gsettings >/dev/null 2>&1; then
-    MATE_TERM=$(gsettings get org.mate.applications-terminal exec 2>/dev/null | tr -d "'")
-    if [ -n "$MATE_TERM" ]; then
-        echo "   -> Configuração lida do MATE: '$MATE_TERM'"
-        CLEAN_TERM=$(echo "$MATE_TERM" | awk '{print $1}')
-        if command -v "$CLEAN_TERM" >/dev/null 2>&1; then
-            TARGET_TERM="$MATE_TERM"
-        else
-            echo "⚠️  O terminal configurado ($MATE_TERM) não foi encontrado no sistema."
-        fi
-    fi
+MATE_TERM=$(gsettings get org.mate.applications-terminal exec 2>/dev/null | tr -d "'")
+if [ -n "$MATE_TERM" ] && command -v "$MATE_TERM" >/dev/null 2>&1; then
+    TARGET_TERM="$MATE_TERM"
 else
-    echo "⚠️  Comando 'gsettings' não encontrado."
+    TARGET_TERM="terminator"
 fi
-if [ -z "$TARGET_TERM" ]; then
-    echo "⚠️  Tentando detecção manual..."
-    for term in mate-terminal gnome-terminal konsole xfce4-terminal terminator alacritty kitty xterm; do
-        if command -v $term >/dev/null 2>&1; then
-            TARGET_TERM=$term
-            echo "   -> Terminal encontrado manualmente: $TARGET_TERM"
-            break
-        fi
-    done
-fi
-if [ -z "$TARGET_TERM" ]; then
-    echo "❌ ERRO CRÍTICO: Nenhum emulador de terminal encontrado."
-    exit 1
-fi
-echo "✅ Terminal definido para uso: $TARGET_TERM"
+echo "✅ Definindo: $TARGET_TERM"
 CMD_LINE="export TERMINAL=$TARGET_TERM"
-CONFIG_FILES="$HOME/.bashrc $HOME/.zshrc $HOME/.profile $HOME/.xprofile $HOME/.bash_profile"
-FOUND_ANY=0
-for file in $CONFIG_FILES; do
+for file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.xprofile"; do
     if [ -f "$file" ]; then
-        FOUND_ANY=1
-        if grep -q "export TERMINAL=" "$file"; then
-            echo "ℹ️  O arquivo $file já possui uma configuração de TERMINAL."
-        else
-            echo "" >> "$file"
-            echo "# Auto-config: Define terminal padrão (Rclone fix)" >> "$file"
-            echo "$CMD_LINE" >> "$file"
-            echo "✅ Configuração gravada em: $file"
-        fi
+        grep -q "export TERMINAL=" "$file" || echo "$CMD_LINE" >> "$file"
     fi
 done
-if [ $FOUND_ANY -eq 0 ]; then
-    echo "✅ Criando ~/.bashrc..."
-    echo "$CMD_LINE" > "$HOME/.bashrc"
-fi
-echo "🎉 Sucesso! Variável configurada."
 EOF
 
 chmod +x fixrclone-browser.sh
 ./fixrclone-browser.sh
 
 # --- ETAPA 4: Habilitação de Serviços ---
-sudo systemctl enable ufw
-sudo systemctl enable lightdm
-sudo systemctl enable NetworkManager
-sudo systemctl enable bluetooth
+sudo systemctl enable ufw lightdm NetworkManager bluetooth
 
-echo "PROCESSO FINALIZADO. REINICIANDO EM 5 SEGUNDOS..."
+echo "REINICIANDO EM 5 SEGUNDOS..."
 sleep 5
 sudo reboot
