@@ -1,23 +1,21 @@
 #!/bin/sh
 
-# Ativa o modo verbose no shell para rastreamento detalhado de cada etapa
-# -v: imprime as linhas do script conforme são lidas
-# -x: imprime os comandos e seus argumentos conforme são executados
+# Ativa o modo verbose no shell para rastreamento total de cada linha e comando
 set -v
 set -x
 
-echo "INICIANDO PROCESSO DE INSTALAÇÃO EM MODO VERBOSE..."
+echo "INICIANDO PROCESSO DE INSTALAÇÃO INTEGRAL - MODO VERBOSE"
 
-# --- ETAPA 1: Repositórios Oficiais (MATE, Utilitários e Network Manager) ---
-# O comando "sudo pacman -Syyu --needed --noconfirm" é mantido e respeitado.
-# Foram incluídos individualmente os pacotes do mate-desktop, mate-extra e o network-manager-applet.
-
+# --- ETAPA 1: Repositórios Oficiais (MATE, Rede, Bluetooth e XDG) ---
+# O COMANDO: "sudo pacman -Syyu --needed --noconfirm" é respeitado e MANTIDO.
 echo "Executando Etapa 1: Instalação via pacman..."
 
 sudo pacman -Syyu --needed --noconfirm \
     xorg xorg-server \
     lightdm lightdm-gtk-greeter lightdm-gtk-greeter-settings \
     network-manager-applet \
+    bluez bluez-utils blueman \
+    xdg-user-dirs \
     flatpak gufw gparted file-roller xarchiver engrampa \
     git go rust timeshift \
     mate-desktop \
@@ -28,28 +26,30 @@ sudo pacman -Syyu --needed --noconfirm \
     mate-session-manager mate-settings-daemon mate-system-monitor \
     mate-terminal mate-user-guide mate-utils pluma
 
-# --- ETAPA 2: Compilação do Paru (AUR Helper) ---
+# --- ETAPA 1.2: Configuração de Diretórios de Usuário ---
+echo "Executando Etapa 1.2: Atualização dos diretórios XDG..."
+xdg-user-dirs-update
+
+# --- ETAPA 2: Instalação do Paru (AUR Helper) ---
 echo "Executando Etapa 2: Clonagem e compilação do Paru..."
 if [ -d "paru" ]; then 
-    echo "Removendo diretório paru existente para nova clonagem..."
     rm -rf paru
 fi
 
 git clone https://aur.archlinux.org/paru.git
 cd paru
-# O makepkg exibirá todo o processo de build detalhadamente
 makepkg -si --noconfirm
 cd ..
 
 # --- ETAPA 3: Instalação AUR com Questionamento de Veracidade ---
+# Incluído o pacote rclone-browser conforme solicitado.
 echo "----------------------------------------------------------------"
-echo "SOLICITAÇÃO DE VERIFICAÇÃO HUMANA - PACOTES AUR"
-echo "Os seguintes pacotes foram localizados via PARU:"
-echo "webcamoid, brave-bin, simplescreenrecorder, google-chrome,"
-echo "octopi, ocs-url, archlinux-tweak-tool"
+echo "SOLICITAÇÃO DE VERIFICAÇÃO HUMANA - PACOTES AUR (PARU)"
+echo "Pacotes: webcamoid, brave-bin, simplescreenrecorder, google-chrome,"
+echo "octopi, ocs-url, archlinux-tweak-tool, rclone-browser"
 echo "----------------------------------------------------------------"
 
-# Desativa verbose temporariamente para que a pergunta ao usuário seja legível
+# Pausa momentânea do verbose para garantir a leitura do prompt pelo utilizador
 set +v
 set +x
 printf "Você confirma a veracidade e deseja proceder com a instalação via PARU? (s/n): "
@@ -61,19 +61,19 @@ if [ "$resposta" = "s" ] || [ "$resposta" = "S" ]; then
     echo "Procedendo com a instalação via Paru..."
     paru -Syyu --needed --noconfirm \
         webcamoid brave-bin simplescreenrecorder google-chrome \
-        octopi ocs-url archlinux-tweak-tool
+        octopi ocs-url archlinux-tweak-tool rclone-browser
 else
-    echo "Etapa 3 abortada pelo usuário. Os pacotes AUR não foram instalados."
+    echo "Etapa 3 ignorada pelo utilizador."
 fi
 
 # --- ETAPA 4: Habilitação de Serviços e Reinicialização ---
-echo "Executando Etapa 4: Habilitação de serviços e reboot..."
+echo "Executando Etapa 4: Habilitação de serviços e reboot automatizado..."
 
-# Habilita o firewall, o gerenciador de login e o NetworkManager (necessário para o applet)
 sudo systemctl enable ufw
 sudo systemctl enable lightdm
 sudo systemctl enable NetworkManager
+sudo systemctl enable bluetooth
 
-echo "PROCESSO CONCLUÍDO. O SISTEMA REINICIARÁ EM 5 SEGUNDOS..."
+echo "PROCESSO CONCLUÍDO. REINICIANDO EM 5 SEGUNDOS..."
 sleep 5
 sudo reboot
