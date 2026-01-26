@@ -4,7 +4,7 @@
 set -v
 set -x
 
-echo "INICIANDO INSTALAÇÃO - VERSÃO COM ATALHOS CORRIGIDOS E PAUSA"
+echo "INICIANDO INSTALAÇÃO - VERSÃO SEM ATALHOS CUSTOMIZADOS"
 
 # --- ETAPA 1: Repositórios Oficiais ---
 sudo pacman -Syyu --needed --noconfirm \
@@ -48,48 +48,12 @@ for pkg in $PACOTES_AUR; do
     if [ "$resposta" = "s" ] || [ "$resposta" = "S" ]; then paru -S --needed --noconfirm "$pkg"; fi
 done
 
-# --- ETAPA 4.2: Configurações de Interface e Atalhos (MATE) ---
-echo "Configurando Terminator e Atalhos de Teclado..."
-
-# Define Terminator como padrão
+# --- ETAPA 4.2: Configuração de Aplicação Padrão ---
+echo "Configurando Terminator como terminal preferencial..."
 if command -v terminator >/dev/null 2>&1; then
     gsettings set org.mate.applications-terminal exec 'terminator'
     gsettings set org.mate.applications-terminal exec-arg "-x"
 fi
-
-# Limpa o PrintScreen padrão
-gsettings set org.mate.SettingsDaemon.plugins.media-keys screenshot ''
-
-# Configuração detalhada de atalhos personalizados
-BASE="org.mate.SettingsDaemon.plugins.external-keybindings"
-
-# Atalho 1: Flameshot (Print)
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom0/ name 'flameshot'
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom0/ command 'flameshot gui'
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom0/ binding 'Print'
-
-# Atalho 2: System Monitor (Ctrl+Alt+Del)
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom1/ name 'mate-system-monitor1'
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom1/ command 'mate-system-monitor'
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom1/ binding '<Control><Alt>Delete'
-
-# Atalho 3: System Monitor (Ctrl+Shift+Esc)
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom2/ name 'mate-system-monitor2'
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom2/ command 'mate-system-monitor'
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom2/ binding '<Control><Shift>Escape'
-
-# Atalho 4: Terminator (Ctrl+Alt+T)
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom3/ name 'terminator'
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom3/ command 'terminator'
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom3/ binding '<Control><Alt>t'
-
-# Atalho 5: Caja (Super+E)
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom4/ name 'caja'
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom4/ command 'caja'
-gsettings set $BASE.custom-keybindings:/org/mate/settings-daemon/plugins/external-keybindings/custom4/ binding '<Mod4>e'
-
-# Ativa a lista de atalhos
-gsettings set org.mate.SettingsDaemon.plugins.keybinding custom-list "['custom0', 'custom1', 'custom2', 'custom3', 'custom4']"
 
 # --- ETAPA 4.3: Fix Rclone-Browser ---
 cat << 'EOF' > fixrclone-browser.sh
@@ -111,8 +75,8 @@ set +x
 echo ""
 echo "################################################################"
 echo "PROCESSO CONCLUÍDO!"
-echo "Todos os pacotes foram instalados e os atalhos foram configurados."
-echo "Por favor, revise as mensagens acima."
+echo "O sistema está pronto. Os atalhos de teclado devem ser"
+echo "configurados manualmente em: Centro de Controle > Atalhos."
 echo "################################################################"
 printf "Pressione [ENTER] para reiniciar o sistema ou [Ctrl+C] para sair: "
 read -r null_var
