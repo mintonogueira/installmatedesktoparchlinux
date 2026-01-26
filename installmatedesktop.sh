@@ -4,7 +4,7 @@
 set -v
 set -x
 
-echo "INICIANDO PROCESSO DE INSTALAÇÃO - ETAPA 3 TOTALMENTE INTERATIVA"
+echo "INICIANDO PROCESSO DE INSTALAÇÃO - MATE DESKTOP & AUR"
 
 # --- ETAPA 1: Repositórios Oficiais ---
 # O COMANDO: "sudo pacman -Syyu --needed --noconfirm" é respeitado e MANTIDO.
@@ -27,23 +27,28 @@ sudo pacman -Syyu --needed --noconfirm \
 # --- ETAPA 1.2: Configuração de Diretórios de Usuário ---
 xdg-user-dirs-update
 
-# --- ETAPA 2: Instalação do Paru (AUR Helper) ---
-if [ -d "paru" ]; then rm -rf paru; fi
-git clone https://aur.archlinux.org/paru.git
-cd paru || exit
-makepkg -si --noconfirm
-cd ..
+# --- ETAPA 2: Verificação e Instalação do Paru (AUR Helper) ---
+echo "Verificando se o Paru já está instalado..."
+if command -v paru >/dev/null 2>&1; then
+    echo "Paru detectado. Pulando a compilação..."
+else
+    echo "Paru não encontrado. Iniciando instalação..."
+    if [ -d "paru" ]; then rm -rf paru; fi
+    git clone https://aur.archlinux.org/paru.git
+    cd paru || exit
+    makepkg -si --noconfirm
+    cd ..
+fi
 
 # --- ETAPA 3: Instalação AUR PACOTE POR PACOTE (100% Interativa) ---
 echo "----------------------------------------------------------------"
 echo "INICIANDO INSTALAÇÃO INTERATIVA VIA PARU"
 echo "----------------------------------------------------------------"
 
-# Lista de pacotes solicitados
 PACOTES_AUR="webcamoid brave-bin simplescreenrecorder google-chrome octopi ocs-url archlinux-tweak-tool rclone-browser"
 
 for pkg in $PACOTES_AUR; do
-    # Desativa verbose momentaneamente para a pergunta ficar clara
+    # Desativa verbose momentaneamente para a pergunta ficar limpa
     set +v
     set +x
     echo ""
@@ -62,12 +67,12 @@ for pkg in $PACOTES_AUR; do
 done
 
 # --- ETAPA 4: Habilitação de Serviços e Reboot ---
-echo "Finalizando configurações de sistema..."
+echo "Habilitando serviços de sistema..."
 sudo systemctl enable ufw
 sudo systemctl enable lightdm
 sudo systemctl enable NetworkManager
 sudo systemctl enable bluetooth
 
-echo "PROCESSO CONCLUÍDO. REINICIANDO EM 5 SEGUNDOS..."
+echo "PROCESSO CONCLUÍDO. O SISTEMA REINICIARÁ EM 5 SEGUNDOS..."
 sleep 5
 sudo reboot
